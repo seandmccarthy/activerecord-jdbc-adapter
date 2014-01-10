@@ -153,6 +153,27 @@ module TransactionTestMethods
     assert_equal "Three", @three
   end
 
+  def test_parallell_transaction_nesting
+    # Begin and end two nested transactions to ensure each savepoint gets a
+    # unique name
+    Entry.transaction do
+      Entry.create! :title => 'one'
+      Entry.transaction(:requires_new => true) do
+        Entry.create! :title => 'two'
+        raise ActiveRecord::Rollback
+      end
+      Entry.transaction(:requires_new => true) do
+        Entry.create! :title => 'three'
+      end
+    end
+    if ar_version('4.0')
+      all = Entry.order(:title).to_a
+    else
+      all = Entry.all(:order => :title)
+    end
+    assert_equal %w(one three), all.map(&:title)
+  end
+
   def test_savepoint
     omit 'savepoins not supported' unless @supports_savepoints
     Entry.create! :title => '1'

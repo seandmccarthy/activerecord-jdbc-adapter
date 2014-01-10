@@ -147,7 +147,7 @@ module ArJdbc
     end
 
     def type_cast(value, column, array_member = false)
-      return super unless column
+      return super(value, nil) unless column
 
       case value
       when String
@@ -243,6 +243,7 @@ module ArJdbc
     def prepare_column_options(column, types)
       spec = super
       spec[:array] = 'true' if column.respond_to?(:array) && column.array
+      spec[:default] = "\"#{column.default_function}\"" if column.default_function
       spec
     end if AR4_COMPAT
 
@@ -552,6 +553,18 @@ module ArJdbc
       end
     end
 
+    # @note Only for "better" AR 4.0 compatibility.
+    # @private
+    def query(sql, name = nil)
+      log(sql, name) do
+        result = []
+        @connection.execute_query_raw(sql, nil) do |*values|
+          result << values
+        end
+        result
+      end
+    end
+
     # Returns an array of schema names.
     def schema_names
       select_values(
@@ -817,6 +830,9 @@ module ArJdbc
         if AR4_COMPAT && column.array? # will be always falsy in AR < 4.0
           column_class = ::ActiveRecord::ConnectionAdapters::PostgreSQLColumn
           "'#{column_class.array_to_string(value, column, self).gsub(/'/, "''")}'"
+        elsif column.type == :json # only in AR-4.0
+          column_class = ::ActiveRecord::ConnectionAdapters::PostgreSQLColumn
+          super(column_class.json_to_string(value), column)
         else super
         end
       when Hash
@@ -1222,16 +1238,25 @@ module ActiveRecord::ConnectionAdapters
     include ::ArJdbc::PostgreSQL::Column
 
     def initialize(name, default, oid_type = nil, sql_type = nil, null = true)
-      # NOTE: we support AR <= 3.2 : (name, default, sql_type = nil, null = true)
-      null, sql_type, oid_type = !! sql_type, oid_type, nil unless oid_type.is_a?(Integer)
-      @oid_type = oid_type
-      if sql_type =~ /\[\]$/
+      if oid_type.is_a?(Integer) then @oid_type = oid_type
+      else # NOTE: AR <= 3.2 : (name, default, sql_type = nil, null = true)
+        null, sql_type, oid_type = !! sql_type, oid_type, nil
+      end
+      if sql_type =~ /\[\]$/ && ArJdbc::PostgreSQL::AR4_COMPAT
         @array = true if respond_to?(:array)
         super(name, default, sql_type[0..sql_type.length - 3], null)
       else
         @array = false if respond_to?(:array)
         super(name, default, sql_type, null)
       end
+
+      @default_function = default if has_default_function?(@default, default)
+    end
+
+    private
+
+    def has_default_function?(default_value, default)
+      ! default_value && ( %r{\w+\(.*\)} === default )
     end
 
   end
@@ -1329,7 +1354,7 @@ module ActiveRecord::ConnectionAdapters
 
       def primary_key(name, type = :primary_key, options = {})
         return super unless type == :uuid
-        options[:default] ||= 'uuid_generate_v4()'
+        options[:default] = options.fetch(:default, 'uuid_generate_v4()')
         options[:primary_key] = true
         column name, type, options
       end if ActiveRecord::VERSION::MAJOR > 3 # 3.2 super expects (name)
@@ -1387,6 +1412,7 @@ module ActiveRecord::ConnectionAdapters
     end
 
     if ActiveRecord::VERSION::MAJOR < 4 # Rails 3.x compatibility
+      PostgreSQLJdbcConnection.raw_array_type = true if PostgreSQLJdbcConnection.raw_array_type? == nil
       PostgreSQLJdbcConnection.raw_hstore_type = true if PostgreSQLJdbcConnection.raw_hstore_type? == nil
     end
 

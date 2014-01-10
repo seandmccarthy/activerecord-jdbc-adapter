@@ -2,6 +2,9 @@ language: ruby
 bundler_args: --without development
 script: bundle exec rake test_$DB
 before_script: export JRUBY_OPTS="--server -Xcext.enabled=false -Xcompile.invokedynamic=false"
+before_install:
+  - gem update --system 2.1.11
+  #- 'ruby -e "puts RUBY_VERSION" | grep ^1\.8 && gem update --system -v 2.1.11 || true'
 rvm:
   - jruby
 gemfile:
@@ -37,8 +40,8 @@ branches:
     - master
     - 1-2-stable
 matrix:
-  allow_failures:
-    - gemfile: gemfiles/rails41.gemfile
+  #allow_failures:
+    #- gemfile: gemfiles/rails41.gemfile
   exclude:
     # Rails 4 prefers Ruby 2.0 (or at least >= 1.9.3) :
     - rvm: jruby

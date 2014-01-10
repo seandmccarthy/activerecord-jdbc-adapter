@@ -95,14 +95,18 @@ development:
   url: jdbc:mysql://localhost:3306/blog_development
 ```
 
-For JNDI data sources, you may simply specify the JNDI location as follows (the
-correct database type will be automatically detected):
+For JNDI data sources, you may simply specify the JNDI location as follows, it's
+recommended to use the same adapter: setting as one would configure when using
+"bare" (JDBC) connections e.g. :
 
 ```yml
 production:
-  adapter: jndi # jdbc
+  adapter: postgresql
   jndi: jdbc/PostgreDS
 ```
+
+**NOTE:** any other settings such as *database:*, *username:*, *properties:* make
+no difference since everything is already configured on the JNDI DataSource end.
 
 JDBC driver specific properties might be set if you use an URL to specify the DB
 or preferably using the *properties:* syntax:
@@ -179,14 +183,15 @@ that case simply setup your *Gemfile* as:
 
 ```ruby
 gem 'activerecord', '~> 4.0.0'
-gem 'activerecord-jdbc-adapter', '~> 1.3.0', platform: :jruby
+gem 'activerecord-jdbc-adapter', '~> 1.3.2', platform: :jruby
 ```
 
 #### Without Bundler
 
-Install the needed gems with JRuby:
+Install the needed gems with JRuby, for example:
 
-    jruby -S gem install activerecord activerecord-jdbc-adapter
+    gem install activerecord -v "~> 3.2.10"
+    gem install activerecord-jdbc-adapter --ignore-dependencies
 
 If you wish to use the adapter for a specific database, you can install it
 directly and the (jdbc-) driver gem (dependency) will be installed as well:
@@ -237,8 +242,10 @@ ask on the #JRuby IRC channel on http://freenode.net/ (try [web-chat][6]).
 
 ## Authors
 
-This project was written by Nick Sieger <nick@nicksieger.com> and Ola Bini
-<olabini@gmail.com> with lots of help from the JRuby community.
+This project was originally written by [Nick Sieger](http://github.com/nicksieger)
+and [Ola Bini](http://github.com/olabini) with lots of help from the JRuby community.
+Polished 3.x compatibility and 4.x support (for AR-JDBC >= 1.3.0) was managed by
+[Karol Bucek](http://github.com/kares) among others.
 
 ## License
 

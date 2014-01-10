@@ -75,6 +75,24 @@ module ArJdbc
     # @see #emulate_booleans?
     def self.emulate_booleans=(emulate); @@emulate_booleans = emulate; end
 
+
+    @@update_lob_values = true
+
+    # Updating records with LOB values (binary/text columns) in a separate
+    # statement can be disabled using :
+    #
+    #   ArJdbc::Firebird.update_lob_values = false
+    def self.update_lob_values?; @@update_lob_values; end
+    # @see #update_lob_values?
+    def self.update_lob_values=(update); @@update_lob_values = update; end
+
+    # @see #update_lob_values?
+    def update_lob_values?; Firebird.update_lob_values?; end
+
+    # @see #quote
+    # @private
+    BLOB_VALUE_MARKER = "''"
+
     ADAPTER_NAME = 'Firebird'.freeze
 
     def adapter_name
@@ -166,11 +184,13 @@ module ArJdbc
     end
 
     # Should primary key values be selected from their corresponding
-    # sequence before the insert statement? If true, next_sequence_value
-    # is called before each insert to set the record's primary key.
-    # This is false for all adapters but Firebird.
+    # sequence before the insert statement?
+    # @see #next_sequence_value
+    # @override
     def prefetch_primary_key?(table_name = nil)
-      true
+      return true if table_name.nil?
+      table_name = table_name.to_s
+      columns(table_name).count { |column| column.primary } == 1
     end
 
     def default_sequence_name(table_name, column=nil)
@@ -220,8 +240,15 @@ module ArJdbc
       return value if sql_literal?(value)
 
       type = column && column.type
+
       # BLOBs are updated separately by an after_save trigger.
-      return "NULL" if type == :binary || type == :text
+      if type == :binary || type == :text
+        if update_lob_values?
+          return value.nil? ? "NULL" : BLOB_VALUE_MARKER
+        else
+          return "'#{quote_string(value)}'"
+        end
+      end
 
       case value
       when String, ActiveSupport::Multibyte::Chars
@@ -276,6 +303,11 @@ module ArJdbc
     def quoted_false
       quote(0)
     end
+
+    # @override
+    def quote_table_name_for_assignment(table, attr)
+      quote_column_name(attr)
+    end if ::ActiveRecord::VERSION::MAJOR >= 4
 
     # @override
     def quote_column_name(column_name)

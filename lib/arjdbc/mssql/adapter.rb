@@ -581,10 +581,10 @@ module ArJdbc
 
     # @override
     def release_savepoint(name = current_savepoint_name)
-      if sqlserver_driver?(config)
-        @connection.rollback_savepoint(name)
-      else
+      if @connection.jtds_driver?
         @connection.release_savepoint(name)
+      else # MS invented it's "own" way
+        @connection.rollback_savepoint(name)
       end
     end
 

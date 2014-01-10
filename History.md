@@ -1,3 +1,40 @@
+## 1.3.4 (12/12/13)
+
+- [postgres] unwrap connection instead of casting when adding custom types (#515)
+- [postgres] allow returning string values for (JDBC) arrays with (#510)
+- allow for symbol keys with custom JDBC properties in `config[:properties]`
+- replacing use of AR::ConnectionFailed with AR::ConnectionNotEstablished (#513)
+- [firebird] fix for missing args when visit_Arel_Nodes_SelectCore is called
+- [postgres] better column compatibility with 3.x (avoid array/oid_type)
+- [postgres] backport array-parser due `Column#extract_default` (#504)
+- [postgres] backported "Correctly parse bigint defaults in PostgreSQL"
+- [postgres] 4.0 compat - detect default_function just like on MRI
+- [postgres] backport support for negative money values (in parenthesis)
+- [postgres] support :login_timeout as a standalone config option
+- [firebird] align `prefetch_primary_key?` with Oracle (only for simple PKs)
+- [oracle] do not pre-fetch the primary key if multiple primary keys exist (#498)
+
+Code Contributors: @andfx, Gavin Stark, Ray Zane, @chapmajs
+
+## 1.3.3 (11/12/13)
+
+- [mysql] allow encoding to be server-detected (using `encoding: false`)
+  due compatibility we still default to `encoding: utf8` if not set (fixes #481)
+- need to match AR 4.0 built-in patterns to re-define (oracle) tasks correctly
+- [postgres] support some of libpg's ENV variables when connecting
+- [derby] allow multiple parallell nested transactions on DERBY
+- [mssql] when using the Microsoft SQL Server driver, fall back to
+  rollback_savepoint when release_savepoint is called (#484)
+- [mysql] only kill the connections cancel timer for driver < 5.1.11
+- [sqlite3] work-around driver ignoring passed schema for table (fixes #483)
+- now using explicit adapter classes with H2/HSQLDB
+- [postgres] Add support for array as root element in JSON (#491)
+- [postgres] MRI compat - make sure we have a `query` method (fixes #486)
+- db:structure:load does not create schema for test db (#480)
+
+Code Contributors (in no particular order): Glenn Goodrich, Joao Carlos,
+Jason Franklin, Dominique d'Argent, Sean McCarthy, Uwe Kubosch
+
 ## 1.3.2 (10/11/13)
 
 - when "pop-ing" current savepoint name - consider open transaction count (#477)

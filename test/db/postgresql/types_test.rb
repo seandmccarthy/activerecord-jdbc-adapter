@@ -1,7 +1,7 @@
 require 'test_helper'
 require 'db/postgres'
 
-class PostgresqlDataTypeTest < Test::Unit::TestCase
+class PostgreSQLTypesTest < Test::Unit::TestCase
 
   class PostgresqlArray < ActiveRecord::Base; end
   class PostgresqlUUID < ActiveRecord::Base; end
@@ -246,8 +246,13 @@ _SQL
 
   def test_data_type_of_array_types
     omit_unless @first_array
-    assert_equal :integer, @first_array.column_for_attribute(:commission_by_quarter).type
-    assert_equal :text, @first_array.column_for_attribute(:nicknames).type
+    if ar_version('4.0')
+      assert_equal :integer, @first_array.column_for_attribute(:commission_by_quarter).type
+      assert_equal :text, @first_array.column_for_attribute(:nicknames).type
+    else
+      assert_equal :string, @first_array.column_for_attribute(:commission_by_quarter).type
+      # assert_equal :string, @first_array.column_for_attribute(:nicknames).type
+    end
   end
 
   def test_data_type_of_range_types
@@ -582,6 +587,14 @@ _SQL
     @first_money.save!
     @first_money.reload
     assert_equal new_value, @first_money.wealth
+  end
+
+  def test_money_type_cast
+    column = PostgresqlMoney.columns.find { |c| c.name == 'wealth' }
+    assert_equal(12345678.12, column.type_cast("$12,345,678.12"))
+    assert_equal(12345678.12, column.type_cast("$12.345.678,12"))
+    assert_equal(-1.15, column.type_cast("-$1.15"))
+    assert_equal(-2.25, column.type_cast("($2.25)"))
   end
 
   def test_update_number

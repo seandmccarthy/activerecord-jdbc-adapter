@@ -119,18 +119,22 @@ public class PostgreSQLRubyJdbcConnection extends arjdbc.jdbc.RubyJdbcConnection
     }
 
     @Override
-    protected void setStatementParameters(final ThreadContext context,
-        final Connection connection, final PreparedStatement statement,
-        final List<?> binds) throws SQLException {
-
-        ((PGConnection) connection).addDataType("daterange", DateRangeType.class);
-        ((PGConnection) connection).addDataType("tsrange",   TsRangeType.class);
-        ((PGConnection) connection).addDataType("tstzrange", TstzRangeType.class);
-        ((PGConnection) connection).addDataType("int4range", Int4RangeType.class);
-        ((PGConnection) connection).addDataType("int8range", Int8RangeType.class);
-        ((PGConnection) connection).addDataType("numrange",  NumRangeType.class);
-
-        super.setStatementParameters(context, connection, statement, binds);
+    protected Connection newConnection() throws SQLException {
+        final Connection connection = getConnectionFactory().newConnection();
+        final PGConnection pgConnection;
+        if ( connection instanceof PGConnection ) {
+            pgConnection = (PGConnection) connection;
+        }
+        else {
+            pgConnection = connection.unwrap(PGConnection.class);
+        }
+        pgConnection.addDataType("daterange", DateRangeType.class);
+        pgConnection.addDataType("tsrange",   TsRangeType.class);
+        pgConnection.addDataType("tstzrange", TstzRangeType.class);
+        pgConnection.addDataType("int4range", Int4RangeType.class);
+        pgConnection.addDataType("int8range", Int8RangeType.class);
+        pgConnection.addDataType("numrange",  NumRangeType.class);
+        return connection;
     }
 
     @Override // due statement.setNull(index, Types.BLOB) not working :
@@ -458,6 +462,9 @@ public class PostgreSQLRubyJdbcConnection extends arjdbc.jdbc.RubyJdbcConnection
     protected IRubyObject arrayToRuby(final ThreadContext context,
         final Ruby runtime, final ResultSet resultSet, final int column)
         throws SQLException {
+        if ( rawArrayType == Boolean.TRUE ) { // pre AR 4.0 compatibility
+            return runtime.newString( resultSet.getString(column) );
+        }
         // NOTE: avoid `finally { array.free(); }` on PostgreSQL due :
         // java.sql.SQLFeatureNotSupportedException:
         // Method org.postgresql.jdbc4.Jdbc4Array.free() is not yet implemented.
@@ -550,6 +557,29 @@ public class PostgreSQLRubyJdbcConnection extends arjdbc.jdbc.RubyJdbcConnection
         }
 
         return str.toString();
+    }
+
+    protected static Boolean rawArrayType;
+    static {
+        final String arrayRaw = System.getProperty("arjdbc.postgresql.array.raw");
+        if ( arrayRaw != null ) rawArrayType = Boolean.parseBoolean(arrayRaw);
+    }
+
+    @JRubyMethod(name = "raw_array_type?", meta = true)
+    public static IRubyObject useRawArrayType(final ThreadContext context, final IRubyObject self) {
+        if ( rawArrayType == null ) return context.getRuntime().getNil();
+        return context.getRuntime().newBoolean(rawArrayType);
+    }
+
+    @JRubyMethod(name = "raw_array_type=", meta = true)
+    public static IRubyObject setRawArrayType(final IRubyObject self, final IRubyObject value) {
+        if ( value instanceof RubyBoolean ) {
+            rawArrayType = ((RubyBoolean) value).isTrue() ? Boolean.TRUE : Boolean.FALSE;
+        }
+        else {
+            rawArrayType = value.isNil() ? null : Boolean.TRUE;
+        }
+        return value;
     }
 
     protected static Boolean rawHstoreType;

@@ -20,7 +20,7 @@ module ArJdbc
     def init_connection(jdbc_connection)
       meta = jdbc_connection.meta_data
       if meta.driver_major_version < 5
-        raise ::ActiveRecord::ConnectionFailed,
+        raise ::ActiveRecord::ConnectionNotEstablished,
           "MySQL adapter requires driver >= 5.0 got: '#{meta.driver_version}'"
       elsif meta.driver_major_version == 5 && meta.driver_minor_version < 1
         config[:connection_alive_sql] ||= 'SELECT 1' # need 5.1 for JDBC 4.0
@@ -152,8 +152,8 @@ module ArJdbc
       return value if sql_literal?(value)
       return value.to_s if column && column.type == :primary_key
 
-      if value.kind_of?(String) && column && column.type == :binary && column.class.respond_to?(:string_to_binary)
-        "x'#{column.class.string_to_binary(value).unpack("H*")[0]}'"
+      if value.kind_of?(String) && column && column.type == :binary
+        "x'#{value.unpack("H*")[0]}'"
       elsif value.kind_of?(BigDecimal)
         value.to_s("F")
       else

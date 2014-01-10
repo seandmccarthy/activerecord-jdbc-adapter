@@ -444,7 +444,7 @@ public class RubyJdbcConnection extends RubyObject {
      * @return connection
      */
     @JRubyMethod(name = "init_connection")
-    public IRubyObject init_connection(final ThreadContext context) throws SQLException {
+    public synchronized IRubyObject init_connection(final ThreadContext context) throws SQLException {
         final IRubyObject jdbcConnection = setConnection( newConnection() );
         final IRubyObject adapter = callMethod("adapter"); // self.adapter
         if ( ! adapter.isNil() ) {
@@ -482,7 +482,7 @@ public class RubyJdbcConnection extends RubyObject {
     }
 
     @JRubyMethod(name = "disconnect!")
-    public IRubyObject disconnect(final ThreadContext context) {
+    public synchronized IRubyObject disconnect(final ThreadContext context) {
         // TODO: only here to try resolving multi-thread issues :
         // https://github.com/jruby/activerecord-jdbc-adapter/issues/197
         // https://github.com/jruby/activerecord-jdbc-adapter/issues/198
@@ -499,7 +499,7 @@ public class RubyJdbcConnection extends RubyObject {
     }
 
     @JRubyMethod(name = "reconnect!")
-    public IRubyObject reconnect(final ThreadContext context) {
+    public synchronized IRubyObject reconnect(final ThreadContext context) {
         try {
             final Connection connection = newConnection();
             final IRubyObject result = setConnection( connection );
@@ -991,30 +991,35 @@ public class RubyJdbcConnection extends RubyObject {
         return context.getRuntime().newArray(primaryKeys);
     }
 
-    private static final int PRIMARY_KEYS_COLUMN_NAME = 4;
+    protected static final int PRIMARY_KEYS_COLUMN_NAME = 4;
 
+    @Deprecated // NOTE: this should go private
     protected List<RubyString> primaryKeys(final ThreadContext context, final String tableName) {
         return withConnection(context, new Callable<List<RubyString>>() {
             public List<RubyString> call(final Connection connection) throws SQLException {
-                final Ruby runtime = context.getRuntime();
                 final String _tableName = caseConvertIdentifierForJdbc(connection, tableName);
-                final DatabaseMetaData metaData = connection.getMetaData();
-                ResultSet resultSet = null;
-                final List<RubyString> keyNames = new ArrayList<RubyString>();
-                try {
-                    TableName components = extractTableName(connection, null, _tableName);
-                    resultSet = metaData.getPrimaryKeys(components.catalog, components.schema, components.name);
-
-                    while (resultSet.next()) {
-                        String columnName = resultSet.getString(PRIMARY_KEYS_COLUMN_NAME);
-                        columnName = caseConvertIdentifierForRails(connection, columnName);
-                        keyNames.add( RubyString.newUnicodeString(runtime, columnName) );
-                    }
-                }
-                finally { close(resultSet); }
-                return keyNames;
+                final TableName table = extractTableName(connection, null, _tableName);
+                return primaryKeys(context, connection, table);
             }
         });
+    }
+
+    protected List<RubyString> primaryKeys(final ThreadContext context,
+        final Connection connection, final TableName table) throws SQLException {
+        final DatabaseMetaData metaData = connection.getMetaData();
+        ResultSet resultSet = null;
+        final List<RubyString> keyNames = new ArrayList<RubyString>();
+        try {
+            resultSet = metaData.getPrimaryKeys(table.catalog, table.schema, table.name);
+            final Ruby runtime = context.getRuntime();
+            while ( resultSet.next() ) {
+                String columnName = resultSet.getString(PRIMARY_KEYS_COLUMN_NAME);
+                columnName = caseConvertIdentifierForRails(connection, columnName);
+                keyNames.add( RubyString.newUnicodeString(runtime, columnName) );
+            }
+        }
+        finally { close(resultSet); }
+        return keyNames;
     }
 
     @JRubyMethod(name = "tables")
@@ -1156,13 +1161,15 @@ public class RubyJdbcConnection extends RubyObject {
 
                 String _tableName = caseConvertIdentifierForJdbc(connection, tableName);
                 String _schemaName = caseConvertIdentifierForJdbc(connection, schemaName);
-                final DatabaseMetaData metaData = connection.getMetaData();
+                final TableName table = extractTableName(connection, _schemaName, _tableName);
 
-                final List<RubyString> primaryKeys = primaryKeys(context, _tableName);
+                final List<RubyString> primaryKeys = primaryKeys(context, connection, table);
+
                 ResultSet indexInfoSet = null;
                 final List<IRubyObject> indexes = new ArrayList<IRubyObject>();
                 try {
-                    indexInfoSet = metaData.getIndexInfo(null, _schemaName, _tableName, false, true);
+                    final DatabaseMetaData metaData = connection.getMetaData();
+                    indexInfoSet = metaData.getIndexInfo(table.catalog, table.schema, table.name, false, true);
                     String currentIndex = null;
 
                     while ( indexInfoSet.next() ) {
@@ -2655,7 +2662,7 @@ public class RubyJdbcConnection extends RubyObject {
     }
 
     protected Connection getConnection(boolean error) {
-        final Connection connection = (Connection) dataGetStruct();
+        final Connection connection = (Connection) dataGetStruct(); // synchronized
         if ( connection == null && error ) {
             final RubyClass errorClass = getConnectionNotEstablished( getRuntime() );
             throw new RaiseException(getRuntime(), errorClass, "no connection available", false);
@@ -2663,7 +2670,7 @@ public class RubyJdbcConnection extends RubyObject {
         return connection;
     }
 
-    private synchronized IRubyObject setConnection(final Connection connection) {
+    private IRubyObject setConnection(final Connection connection) {
         close( getConnection(false) ); // close previously open connection if there is one
 
         final IRubyObject rubyConnectionObject =
@@ -3445,15 +3452,15 @@ public class RubyJdbcConnection extends RubyObject {
             name = nameParts[2];
         }
 
-        if (schema != null) {
+        if ( schema != null ) {
             schema = caseConvertIdentifierForJdbc(connection, schema);
         }
         name = caseConvertIdentifierForJdbc(connection, name);
 
-        if (schema != null && ! databaseSupportsSchemas()) {
+        if ( schema != null && ! databaseSupportsSchemas() ) {
             catalog = schema;
         }
-        if (catalog == null) catalog = connection.getCatalog();
+        if ( catalog == null ) catalog = connection.getCatalog();
 
         return new TableName(catalog, schema, name);
     }
